@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HowHuman: 人間認証ゲーム</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* 全体のスタイル */
+        body {
+            font-family: 'Bungee', cursive;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        #game-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(15px);
+            padding: 40px;
+            border-radius: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 900px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ヘッダー */
+        #header {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.2em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        #timer.warning {
+            color: #ff4757;
+            animation: pulse 0.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        /* CAPTCHAエリア */
+        #captcha {
+            margin: 40px 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+        }
+
+        #captcha p {
+            font-size: 1.8em;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+            animation: bounceIn 0.8s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { opacity: 0; transform: translateY(-20px); }
+            60% { opacity: 1; transform: translateY(10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 入力エリア */
+        #input input[type="text"] {
+            padding: 15px;
+            font-size: 1.5em;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+
+        #input input[type="text"]:focus {
+            box-shadow: 0 5px 20px rgba(255, 107, 107, 0.5);
+            outline: none;
+        }
+
+        #input button {
+            padding: 15px 40px;
+            font-size: 1.5em;
+            background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        #input button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* グリッド（画像選択やパズル用） */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            max-width: 400px;
+            margin: 20px auto;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-size: cover;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s;
+        }
+
+        .cell:hover {
+            transform: scale(1.05);
+        }
+
+        .cell.selected {
+            border: 4px solid #ffd700;
+        }
+
+        /* フィードバック */
+        #feedback {
+            font-size: 2em;
+            margin: 20px 0;
+            text-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        #feedback.correct {
+            color: #2ed573;
+            animation: fadeIn 0.5s;
+        }
+
+        #feedback.incorrect {
+            color: #ff4757;
+            animation: shake 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            50% { transform: translateX(10px); }
+            75% { transform: translateX(-10px); }
+            100% { transform: translateX(0); }
+        }
+
+        /* レスポンシブデザイン */
+        @media (max-width: 600px) {
+            #header {
+                font-size: 0.9em;
+                flex-direction: column;
+                padding: 10px;
+            }
+            .cell {
+                width: 80px;
+                height: 80px;
+            }
+            .grid {
+                max-width: 300px;
+            }
+            #input input[type="text"] {
+                font-size: 1.2em;
+            }
+            #input button {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="header">
+            <span id="timer">01:00</span>
+            <span id="score">Score: 0</span>
+            <span id="question">Question: 0</span>
+        </div>
+        <div id="captcha"></div>
+        <div id="input"></div>
+        <div id="feedback"></div>
+    </div>
+
+    <script>
+        // 定数
+        const INITIAL_TIME = 60;
+        const TIME_BONUS = 5;
+        const STREAK_BONUS = 3;
+        const WARNING_TIME = 10;
+        const DIFFICULTY_MULTIPLIER = 1.5;
+
+        // ゲーム状態
+        const gameState = {
+            timeLeft: INITIAL_TIME,
+            score: 0,
+            streak: 0,
+            questionNumber: 0,
+            difficulty: 1,
+            timerInterval: null,
+            mouseTrail: []
+        };
+
+        // DOM要素
+        const elements = {
+            timer: document.getElementById('timer'),
+            score: document.getElementById('score'),
+            question: document.getElementById('question'),
+            captcha: document.getElementById('captcha'),
+            input: document.getElementById('input'),
+            feedback: document.getElementById('feedback')
+        };
+
+        // CAPTCHAの種類
+        const captchaTypes = [
+            'text', 'math', 'shape', 'imageMultiSelect', 'slidePuzzle', 
+            'logic', 'typingChallenge', 'mouseTrail'
+        ];
+
+        // ゲーム開始
+        function startGame() {
+            Object.assign(gameState, {
+                timeLeft: INITIAL_TIME,
+                score: 0,
+                streak: 0,
+                questionNumber: 0,
+                difficulty: 1
+            });
+            elements.timer.textContent = '01:00';
+            elements.score.textContent = 'Score: 0';
+            elements.feedback.innerHTML = `
+                <p style="font-size: 2.5em; color: #fff; animation: bounceIn 1s;">HowHuman: 人間か試せ！</p>
+                <button onclick="playGame()" style="padding: 20px 50px; font-size: 1.5em; background: linear-gradient(135deg, #ff6b6b, #4ecdc4); color: #fff; border: none; border-radius: 15px; cursor: pointer;">ゲーム開始</button>
+            `;
+            elements.captcha.innerHTML = '';
+            elements.input.innerHTML = '';
+        }
+
+        // ゲームプレイ開始
+        function playGame() {
+            generateCaptcha();
+            gameState.timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // タイマー更新
+        function updateTimer() {
+            gameState.timeLeft--;
+            const minutes = Math.floor(gameState.timeLeft / 60).toString().padStart(2, '0');
+            const seconds = (gameState.timeLeft % 60).toString().padStart(2, '0');
+            elements.timer.textContent = `${minutes}:${seconds}`;
+            if (gameState.timeLeft <= WARNING_TIME) {
+                elements.timer.classList.add('warning');
+            }
+            if (gameState.timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        // CAPTCHA生成
+        function generateCaptcha() {
+            gameState.questionNumber++;
+            gameState.difficulty = Math.min(3, 1 + gameState.questionNumber / 10);
+            elements.question.textContent = `Question: ${gameState.questionNumber}`;
+            const type = captchaTypes[Math.floor(Math.random() * captchaTypes.length)];
+            switch (type) {
+                case 'text': generateTextCaptcha(); break;
+                case 'math': generateMathCaptcha(); break;
+                case 'shape': generateShapeCaptcha(); break;
+                case 'imageMultiSelect': generateImageMultiSelectCaptcha(); break;
+                case 'slidePuzzle': generateSlidePuzzleCaptcha(); break;
+                case 'logic': generateLogicCaptcha(); break;
+                case 'typingChallenge': generateTypingChallengeCaptcha(); break;
+                case 'mouseTrail': generateMouseTrailCaptcha(); break;
+            }
+        }
+
+        // テキストCAPTCHA
+        function generateTextCaptcha() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+            const length = 5 + Math.floor(gameState.difficulty);
+            let captchaText = '';
+            for (let i = 0; i < length; i++) {
+                captchaText += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = 300;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, 300, 100);
+            ctx.font = '50px Bungee';
+            for (let i = 0; i < captchaText.length; i++) {
+                ctx.fillStyle = `hsl(${Math.random() * 360}, 80%, 50%)`;
+                ctx.save();
+                ctx.translate(50 * i + 20, 60);
+                ctx.rotate((Math.random() - 0.5) * 0.5);
+                ctx.fillText(captchaText[i], 0, 0);
+                ctx.restore();
+            }
+            for (let i = 0; i < 150; i++) {
+                ctx.fillStyle = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                ctx.beginPath();
+                ctx.arc(Math.random() * 300, Math.random() * 100, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            elements.captcha.innerHTML = '';
+            elements.captcha.appendChild(canvas);
+            elements.input.innerHTML = '<input type="text" id="answer" placeholder="文字を入力"><button id="submit">送信</button>';
+            gameState.correctAnswer = captchaText;
+            gameState.currentType = 'text';
+            bindSubmit();
+        }
+
+        // 数学CAPTCHA
+        function generateMathCaptcha() {
+            const num1 = Math.floor(Math.random() * 20 * gameState.difficulty) + 1;
+            const num2 = Math.floor(Math.random() * 20 * gameState.difficulty) + 1;
+            const operators = ['+', '-', '*', '/', '^'];
+            const operator = operators[Math.floor(Math.random() * operators.length)];
+            let answer;
+            switch (operator) {
+                case '+': answer = num1 + num2; break;
+                case '-': answer = num1 - num2; break;
+                case '*': answer = num1 * num2; break;
+                case '/': answer = num1 / num2; break;
+                case '^': answer = Math.pow(num1, 2); break;
+            }
+            if (operator === '/') answer = Math.round(answer * 100) / 100;
+            elements.captcha.innerHTML = `<p>問題: ${num1} ${operator === '^' ? 'の2乗' : operator + ' ' + num2} = ?</p>`;
+            elements.input.innerHTML = '<input type="text" id="answer" placeholder="答えを入力"><button id="submit">送信</button>';
+            gameState.correctAnswer = answer.toString();
+            gameState.currentType = 'math';
+            bindSubmit();
+        }
+
+        // シェイプCAPTCHA
+        function generateShapeCaptcha() {
+            const shapes = ['circle', 'square', 'triangle', 'star', 'pentagon'];
+            const colors = ['red', 'green', 'blue', 'yellow', 'purple'];
+            const targetShape = shapes[Math.floor(Math.random() * shapes.length)];
+            const targetColor = colors[Math.floor(Math.random() * colors.length)];
+            const grid = Array(9).fill().map(() => ({
+                shape: shapes[Math.floor(Math.random() * shapes.length)],
+                color: colors[Math.floor(Math.random() * colors.length)]
+            }));
+            if (!grid.some(cell => cell.shape === targetShape && cell.color === targetColor)) {
+                grid[Math.floor(Math.random() * 9)] = { shape: targetShape, color: targetColor };
+            }
+            let gridHtml = '<div class="grid">';
+            grid.forEach((cell, idx) => {
+                gridHtml += `<div class="cell" data-index="${idx}" style="background-color: ${cell.color};"></div>`;
+            });
+            gridHtml += '</div>';
+            elements.captcha.innerHTML = `<p>${targetColor}の${targetShape}をすべて選べ</p>${gridHtml}`;
+            elements.input.innerHTML = '<button id="submit">送信</button>';
+            gameState.correctAnswer = grid.map((cell, idx) => cell.shape === targetShape && cell.color === targetColor ? idx : -1).filter(i => i !== -1);
+            gameState.currentType = 'shape';
+            bindGridSelection();
+            bindSubmit();
+        }
+
+        // 画像複数選択CAPTCHA
+        function generateImageMultiSelectCaptcha() {
+            const objects = ['car', 'tree', 'sign', 'dog', 'house'];
+            const target = objects[Math.floor(Math.random() * objects.length)];
+            const grid = Array(9).fill().map(() => objects[Math.floor(Math.random() * objects.length)]);
+            const targetCount = Math.floor(Math.random() * 3) + 1;
+            for (let i = 0; i < targetCount; i++) {
+                grid[Math.floor(Math.random() * 9)] = target;
+            }
+            let gridHtml = '<div class="grid">';
+            grid.forEach((obj, idx) => {
+                gridHtml += `<div class="cell" data-index="${idx}" style="background-image: url('https://via.placeholder.com/100?text=${obj}');"></div>`;
+            });
+            gridHtml += '</div>';
+            elements.captcha.innerHTML = `<p>${target}が写っている画像をすべて選べ</p>${gridHtml}`;
+            elements.input.innerHTML = '<button id="submit">送信</button>';
+            gameState.correctAnswer = grid.map((obj, idx) => obj === target ? idx : -1).filter(i => i !== -1);
+            gameState.currentType = 'imageMultiSelect';
+            bindGridSelection();
+            bindSubmit();
+        }
+
+        // スライドパズルCAPTCHA
+        function generateSlidePuzzleCaptcha() {
+            const order = [0, 1, 2, 3];
+            const shuffled = [...order].sort(() => Math.random() - 0.5);
+            let gridHtml = '<div class="grid" style="grid-template-columns: repeat(2, 1fr);">';
+            shuffled.forEach((num, idx) => {
+                gridHtml += `<div class="cell" data-index="${idx}" data-value="${num}" style="background-image: url('https://via.placeholder.com/100?text=${num}');"></div>`;
+            });
+            gridHtml += '</div>';
+            elements.captcha.innerHTML = `<p>画像を正しい順番に並べ替えろ</p>${gridHtml}`;
+            elements.input.innerHTML = '<button id="submit">送信</button>';
+            gameState.correctAnswer = order;
+            gameState.currentType = 'slidePuzzle';
+            bindPuzzleInteraction();
+            bindSubmit();
+        }
+
+        // ロジックCAPTCHA
+        function generateLogicCaptcha() {
+            const questions = [
+                { q: 'AはBより大きく、BはCより小さい。AはCより大きいか？', a: 'はい' },
+                { q: '1個70円のりんごと1個30円のみかん。2個ずつ買うといくら？', a: '200' }
+            ];
+            const { q, a } = questions[Math.floor(Math.random() * questions.length)];
+            elements.captcha.innerHTML = `<p>${q}</p>`;
+            elements.input.innerHTML = '<input type="text" id="answer" placeholder="答えを入力"><button id="submit">送信</button>';
+            gameState.correctAnswer = a;
+            gameState.currentType = 'logic';
+            bindSubmit();
+        }
+
+        // タイピングチャレンジCAPTCHA
+        function generateTypingChallengeCaptcha() {
+            const phrase = 'HUMANITY TEST'.split('').map(c => Math.random() > 0.5 ? c.toLowerCase() : c).join('');
+            elements.captcha.innerHTML = `<p style="font-family: 'Press Start 2P'; letter-spacing: 5px;">${phrase}</p>`;
+            elements.input.innerHTML = '<input type="text" id="answer" placeholder="素早く入力"><button id="submit">送信</button>';
+            gameState.correctAnswer = phrase;
+            gameState.currentType = 'typingChallenge';
+            bindSubmit();
+        }
+
+        // マウス軌跡CAPTCHA
+        function generateMouseTrailCaptcha() {
+            elements.captcha.innerHTML = `<p>マウスを自然に動かし、赤い円に到達しろ</p><canvas id="trailCanvas" width="400" height="200"></canvas>`;
+            elements.input.innerHTML = '<button id="submit">送信</button>';
+            const canvas = document.getElementById('trailCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(350, 150, 20, 0, 2 * Math.PI);
+            ctx.fill();
+            gameState.mouseTrail = [];
+            canvas.addEventListener('mousemove', (e) => {
+                gameState.mouseTrail.push({ x: e.offsetX, y: e.offsetY, t: Date.now() });
+                ctx.beginPath();
+                ctx.arc(e.offsetX, e.offsetY, 2, 0, 2 * Math.PI);
+                ctx.fillStyle = 'blue';
+                ctx.fill();
+            });
+            gameState.correctAnswer = { x: 350, y: 150 };
+            gameState.currentType = 'mouseTrail';
+            bindSubmit();
+        }
+
+        // イベントバインディング
+        function bindSubmit() {
+            document.getElementById('submit').addEventListener('click', checkAnswer);
+        }
+
+        function bindGridSelection() {
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.addEventListener('click', () => cell.classList.toggle('selected'));
+            });
+        }
+
+        function bindPuzzleInteraction() {
+            // 簡易的なスライドロジック（実運用では更に改良が必要）
+            console.log('パズルスライド未実装');
+        }
+
+        // 回答チェック
+        function checkAnswer() {
+            let isCorrect = false;
+            try {
+                if (['text', 'math', 'logic', 'typingChallenge'].includes(gameState.currentType)) {
+                    const userAnswer = document.getElementById('answer').value.trim();
+                    isCorrect = userAnswer === gameState.correctAnswer;
+                } else if (['shape', 'imageMultiSelect'].includes(gameState.currentType)) {
+                    const selected = Array.from(document.querySelectorAll('.cell.selected')).map(cell => parseInt(cell.dataset.index));
+                    isCorrect = selected.length === gameState.correctAnswer.length && selected.every(i => gameState.correctAnswer.includes(i));
+                } else if (gameState.currentType === 'slidePuzzle') {
+                    const currentOrder = Array.from(document.querySelectorAll('.cell')).map(cell => parseInt(cell.dataset.value));
+                    isCorrect = currentOrder.every((val, idx) => val === gameState.correctAnswer[idx]);
+                } else if (gameState.currentType === 'mouseTrail') {
+                    const lastMove = gameState.mouseTrail[gameState.mouseTrail.length - 1];
+                    isCorrect = lastMove && Math.hypot(lastMove.x - gameState.correctAnswer.x, lastMove.y - gameState.correctAnswer.y) < 20;
+                }
+                handleResult(isCorrect);
+            } catch (e) {
+                console.error('回答チェックエラー:', e);
+                showFeedback('incorrect');
+            }
+        }
+
+        // 結果処理
+        function handleResult(isCorrect) {
+            if (isCorrect) {
+                gameState.score += Math.floor(gameState.difficulty * 10);
+                gameState.streak++;
+                elements.score.textContent = `Score: ${gameState.score}`;
+                if (gameState.streak % STREAK_BONUS === 0) {
+                    gameState.timeLeft += TIME_BONUS;
+                }
+                showFeedback('correct');
+            } else {
+                gameState.streak = 0;
+                showFeedback('incorrect');
+            }
+            setTimeout(generateCaptcha, 800);
+        }
+
+        // フィードバック表示
+        function showFeedback(type) {
+            elements.feedback.className = type;
+            elements.feedback.textContent = type === 'correct' ? '正解！' : '不正解';
+            setTimeout(() => elements.feedback.textContent = '', 800);
+        }
+
+        // ゲーム終了
+        function endGame() {
+            clearInterval(gameState.timerInterval);
+            elements.captcha.innerHTML = '';
+            elements.input.innerHTML = '';
+            elements.feedback.innerHTML = `
+                <p style="font-size: 3em; animation: bounceIn 1s;">ゲームオーバー！スコア: ${gameState.score}</p>
+                <button onclick="shareOnTwitter()" style="padding: 20px 50px; font-size: 1.5em; background: linear-gradient(135deg, #ff9a9e, #fad0c4); color: #fff; border: none; border-radius: 15px; cursor: pointer; margin: 10px;">Twitterでシェア</button>
+                <button onclick="startGame()" style="padding: 20px 50px; font-size: 1.5em; background: linear-gradient(135deg, #4ecdc4, #45b7d1); color: #fff; border: none; border-radius: 15px; cursor: pointer; margin: 10px;">もう一度</button>
+            `;
+        }
+
+        // Twitterシェア
+        function shareOnTwitter() {
+            const text = `HowHumanで${gameState.score}点取った！君は人間性を証明できるか？ #HowHuman`;
+            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+        }
+
+        // 初期化
+        startGame();
+    </script>
+</body>
+</html>
