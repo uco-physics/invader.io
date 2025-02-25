@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ラストウォー</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #000;
+            overflow: hidden;
+        }
+        canvas {
+            border: 1px solid #fff;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        // Canvasとコンテキストの設定
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+
+        // 定数
+        const BRIDGE_WIDTH = GAME_WIDTH * 0.8;
+        const BRIDGE_COLOR = '#808080';
+        const SEA_COLOR = '#0000FF';
+        const PLAYER_COLOR = '#0000FF';
+        const ENEMY_COLOR = '#00FFFF';
+        const BULLET_COLOR = '#FFFF00';
+        const ITEM_COLOR = '#0000FF';
+        const AURA_COLOR = 'rgba(255, 255, 0, 0.5)';
+        const SCROLL_SPEED = 2;
+        const PLAYER_SPEED = 5;
+        const BULLET_SPEED = 10;
+        const ENEMY_SPEED_BASE = 1;
+        const ENEMY_SPAWN_MIN = 1000; // ミリ秒
+        const ENEMY_SPAWN_MAX = 3000; // ミリ秒
+        const ITEM_SPAWN_INTERVAL = 5000; // ミリ秒
+        const BULLET_UPGRADE_SCORE = 500;
+
+        // ゲーム状態
+        let gameState = {
+            player: {
+                x: GAME_WIDTH / 2 - 25,
+                y: GAME_HEIGHT - 60,
+                width: 50,
+                height: 30,
+                speed: PLAYER_SPEED,
+                bullets: [],
+                score: 0,
+                life: 3,
+                level: 1,
+                enemiesDefeated: 0,
+                bulletLevel: 1,
+                bulletCooldown: 0,
+                auraRadius: 0
+            },
+            enemies: [],
+            items: [],
+            bridgeOffset: 0,
+            lastEnemySpawn: 0,
+            lastItemSpawn: 0,
+            gameOver: false,
+            touchLeft: false,
+            touchRight: false,
+            touchShoot: false
+        };
+
+        // タッチイベントリスナー
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            if (touchX < GAME_WIDTH / 3) gameState.touchLeft = true;
+            else if (touchX > GAME_WIDTH * 2 / 3) gameState.touchRight = true;
+            if (touchY > GAME_HEIGHT * 0.7) gameState.touchShoot = true;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            gameState.touchLeft = false;
+            gameState.touchRight = false;
+            gameState.touchShoot = false;
+        });
+
+        // キーボードイベントリスナー（PC用）
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') gameState.touchLeft = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') gameState.touchRight = true;
+            if (e.key === ' ' && !gameState.gameOver && gameState.player.bulletCooldown <= 0) {
+                fireBullet();
+                gameState.player.bulletCooldown = 20 - gameState.player.bulletLevel * 5;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') gameState.touchLeft = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') gameState.touchRight = false;
+        });
+
+        // 弾の発射処理
+        function fireBullet() {
+            const bullet = {
+                x: gameState.player.x + gameState.player.width / 2 - 2,
+                y: gameState.player.y,
+                width: 4 + gameState.player.bulletLevel * 2,
+                height: 10 + gameState.player.bulletLevel * 5,
+                speed: BULLET_SPEED + gameState.player.bulletLevel * 2,
+                power: gameState.player.bulletLevel
+            };
+            gameState.player.bullets.push(bullet);
+        }
+
+        // 敵の生成
+        function spawnEnemy(timestamp) {
+            const enemy = {
+                x: (GAME_WIDTH - BRIDGE_WIDTH) / 2 + Math.random() * (BRIDGE_WIDTH - 20),
+                y: -20,
+                width: 20,
+                height: 20,
+                speed: ENEMY_SPEED_BASE + gameState.player.level * 0.5,
+                health: 1 + Math.floor(gameState.player.level / 2)
+            };
+            gameState.enemies.push(enemy);
+            gameState.lastEnemySpawn = timestamp;
+        }
+
+        // アイテムの生成
+        function spawnItem(timestamp) {
+            const item = {
+                x: (GAME_WIDTH - BRIDGE_WIDTH) / 2 + Math.random() * (BRIDGE_WIDTH - 30),
+                y: -30,
+                width: 30,
+                height: 30,
+                type: Math.random() < 0.5 ? 'score' : 'bullet'
+            };
+            gameState.items.push(item);
+            gameState.lastItemSpawn = timestamp;
+        }
+
+        // ゲームループ
+        function gameLoop(timestamp) {
+            if (gameState.gameOver) {
+                drawGameOver();
+                return;
+            }
+            update(timestamp);
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 更新処理
+        function update(timestamp) {
+            // プレイヤーの移動
+            if (gameState.touchLeft) {
+                gameState.player.x -= gameState.player.speed;
+                if (gameState.player.x < (GAME_WIDTH - BRIDGE_WIDTH) / 2) gameState.player.x = (GAME_WIDTH - BRIDGE_WIDTH) / 2;
+            }
+            if (gameState.touchRight) {
+                gameState.player.x += gameState.player.speed;
+                if (gameState.player.x + gameState.player.width > (GAME_WIDTH + BRIDGE_WIDTH) / 2) gameState.player.x = (GAME_WIDTH + BRIDGE_WIDTH) / 2 - gameState.player.width;
+            }
+            if (gameState.touchShoot && gameState.player.bulletCooldown <= 0) {
+                fireBullet();
+                gameState.player.bulletCooldown = 20 - gameState.player.bulletLevel * 5;
+            }
+
+            // 弾の移動とクールダウン
+            gameState.player.bullets.forEach((bullet, index) => {
+                bullet.y -= bullet.speed;
+                if (bullet.y < -bullet.height) gameState.player.bullets.splice(index, 1);
+            });
+            if (gameState.player.bulletCooldown > 0) gameState.player.bulletCooldown--;
+
+            // 敵の生成と移動
+            const spawnInterval = ENEMY_SPAWN_MAX - Math.min(2000, gameState.player.level * 200);
+            if (timestamp - gameState.lastEnemySpawn > spawnInterval) spawnEnemy(timestamp);
+            gameState.enemies.forEach((enemy, index) => {
+                enemy.y += enemy.speed;
+                if (enemy.y > GAME_HEIGHT) {
+                    gameState.enemies.splice(index, 1);
+                    gameState.player.life--;
+                    if (gameState.player.life <= 0) gameState.gameOver = true;
+                }
+            });
+
+            // アイテムの生成と移動
+            if (timestamp - gameState.lastItemSpawn > ITEM_SPAWN_INTERVAL) spawnItem(timestamp);
+            gameState.items.forEach((item, index) => {
+                item.y += SCROLL_SPEED;
+                if (item.y > GAME_HEIGHT) gameState.items.splice(index, 1);
+            });
+
+            // 背景スクロール
+            gameState.bridgeOffset += SCROLL_SPEED;
+            if (gameState.bridgeOffset >= 50) gameState.bridgeOffset = 0;
+
+            // 衝突判定
+            checkCollisions();
+
+            // 強化チェック
+            if (gameState.player.score >= BULLET_UPGRADE_SCORE * gameState.player.bulletLevel) {
+                gameState.player.bulletLevel = Math.min(3, gameState.player.bulletLevel + 1);
+                gameState.player.auraRadius = 60;
+            }
+            if (gameState.player.auraRadius > 0) gameState.player.auraRadius -= 0.5;
+
+            // レベルアップ
+            if (gameState.player.enemiesDefeated >= 100) {
+                gameState.player.level++;
+                gameState.player.enemiesDefeated = 0;
+            }
+        }
+
+        // 衝突判定
+        function checkCollisions() {
+            gameState.player.bullets.forEach((bullet, bIndex) => {
+                gameState.enemies.forEach((enemy, eIndex) => {
+                    if (bullet.x < enemy.x + enemy.width &&
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + bullet.height > enemy.y) {
+                        enemy.health -= bullet.power;
+                        gameState.player.bullets.splice(bIndex, 1);
+                        if (enemy.health <= 0) {
+                            gameState.enemies.splice(eIndex, 1);
+                            gameState.player.score += 10 + Math.floor(Math.random() * 11);
+                            gameState.player.enemiesDefeated++;
+                        }
+                    }
+                });
+            });
+
+            gameState.enemies.forEach((enemy, eIndex) => {
+                if (gameState.player.x < enemy.x + enemy.width &&
+                    gameState.player.x + gameState.player.width > enemy.x &&
+                    gameState.player.y < enemy.y + enemy.height &&
+                    gameState.player.y + gameState.player.height > enemy.y) {
+                    gameState.enemies.splice(eIndex, 1);
+                    gameState.player.life--;
+                    if (gameState.player.life <= 0) gameState.gameOver = true;
+                }
+            });
+
+            gameState.player.bullets.forEach((bullet, bIndex) => {
+                gameState.items.forEach((item, iIndex) => {
+                    if (bullet.x < item.x + item.width &&
+                        bullet.x + bullet.width > item.x &&
+                        bullet.y < item.y + item.height &&
+                        bullet.y + bullet.height > item.y) {
+                        gameState.player.bullets.splice(bIndex, 1);
+                        if (item.type === 'score') {
+                            const change = Math.random() < 0.5 ? 12 : -15;
+                            gameState.player.score += change;
+                        } else {
+                            gameState.player.bulletLevel = Math.min(3, gameState.player.bulletLevel + 1);
+                            gameState.player.auraRadius = 60;
+                        }
+                        gameState.items.splice(iIndex, 1);
+                    }
+                });
+            });
+        }
+
+        // 描画処理
+        function draw() {
+            // 背景（海）
+            ctx.fillStyle = SEA_COLOR;
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // 橋
+            ctx.fillStyle = BRIDGE_COLOR;
+            for (let y = -50; y < GAME_HEIGHT; y += 50) {
+                ctx.fillRect((GAME_WIDTH - BRIDGE_WIDTH) / 2, y + gameState.bridgeOffset, BRIDGE_WIDTH, 40);
+                ctx.fillStyle = '#666';
+                ctx.fillRect((GAME_WIDTH - BRIDGE_WIDTH) / 2 - 10, y + gameState.bridgeOffset + 10, 10, 20); // 欄干左
+                ctx.fillRect((GAME_WIDTH + BRIDGE_WIDTH) / 2, y + gameState.bridgeOffset + 10, 10, 20); // 欄干右
+            }
+            ctx.fillStyle = BRIDGE_COLOR;
+
+            // プレイヤー（ジープ）
+            ctx.fillStyle = PLAYER_COLOR;
+            ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+            ctx.fillStyle = '#666'; // 機銃
+            ctx.fillRect(gameState.player.x + gameState.player.width / 2 - 2, gameState.player.y - 10, 4, 10);
+            if (gameState.player.auraRadius > 0) {
+                ctx.beginPath();
+                ctx.arc(gameState.player.x + gameState.player.width / 2, gameState.player.y + gameState.player.height / 2, gameState.player.auraRadius, 0, Math.PI * 2);
+                ctx.fillStyle = AURA_COLOR;
+                ctx.fill();
+            }
+
+            // 弾
+            ctx.fillStyle = BULLET_COLOR;
+            gameState.player.bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                ctx.beginPath();
+                ctx.arc(bullet.x + bullet.width / 2, bullet.y, bullet.width, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 敵
+            ctx.fillStyle = ENEMY_COLOR;
+            gameState.enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                ctx.fillStyle = '#FFF'; // 目
+                ctx.fillRect(enemy.x + 5, enemy.y + 5, 5, 5);
+                ctx.fillRect(enemy.x + 10, enemy.y + 5, 5, 5);
+                ctx.fillStyle = ENEMY_COLOR;
+            });
+
+            // アイテム
+            ctx.fillStyle = ITEM_COLOR;
+            gameState.items.forEach(item => {
+                ctx.fillRect(item.x, item.y, item.width, item.height);
+                ctx.fillStyle = '#FFF';
+                ctx.font = '12px Arial';
+                ctx.fillText(item.type === 'score' ? 'Score' : 'Power', item.x + 2, item.y + 20);
+                ctx.fillStyle = ITEM_COLOR;
+            });
+
+            // UI
+            ctx.fillStyle = '#FFF';
+            ctx.font = '20px Arial';
+            ctx.fillText(`スコア: ${gameState.player.score}`, 10, 30);
+            ctx.fillText(`ライフ: ${gameState.player.life}`, 10, 60);
+            ctx.fillText(`レベル: ${gameState.player.level}`, 10, 90);
+            ctx.fillText(`弾レベル: ${gameState.player.bulletLevel}`, 10, 120);
+        }
+
+        // ゲームオーバー画面
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.fillStyle = '#FF0000';
+            ctx.font = '40px Arial';
+            ctx.fillText('ゲームオーバー', GAME_WIDTH / 2 - 100, GAME_HEIGHT / 2);
+            ctx.fillStyle = '#FFF';
+            ctx.font = '20px Arial';
+            ctx.fillText('リロードでリスタート', GAME_WIDTH / 2 - 80, GAME_HEIGHT / 2 + 40);
+        }
+
+        // ゲーム開始
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​
