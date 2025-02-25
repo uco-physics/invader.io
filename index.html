@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HowHuman</title>
+    <style>
+        /* 全体のスタイル */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+
+        #game-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        #header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+
+        #timer.warning {
+            color: red;
+            font-weight: bold;
+        }
+
+        #captcha, #input {
+            margin: 20px 0;
+        }
+
+        #captcha img, #captcha p {
+            margin-bottom: 10px;
+        }
+
+        #input input[type="text"] {
+            padding: 10px;
+            font-size: 1em;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #input button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #input button:hover {
+            background-color: #0056b3;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+        }
+
+        .cell.selected {
+            border: 3px solid yellow;
+        }
+
+        #feedback {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+
+        #feedback.correct {
+            color: green;
+        }
+
+        #feedback.incorrect {
+            color: red;
+        }
+
+        /* レスポンシブデザイン */
+        @media (max-width: 480px) {
+            #header {
+                font-size: 1em;
+                flex-direction: column;
+            }
+            .cell {
+                width: 40px;
+                height: 40px;
+            }
+            .grid {
+                max-width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="header">
+            <span id="timer">01:00</span>
+            <span id="score">Score: 0</span>
+            <span id="question">Question: 0</span>
+        </div>
+        <div id="captcha"></div>
+        <div id="input"></div>
+        <div id="feedback"></div>
+    </div>
+
+    <script>
+        // ゲームの状態変数
+        let timeLeft = 60;
+        let score = 0;
+        let streak = 0;
+        let questionNumber = 0;
+        let correctAnswer;
+        let currentType;
+        let timerInterval;
+
+        // DOM要素
+        const header = document.getElementById('header');
+        const timerSpan = document.getElementById('timer');
+        const scoreSpan = document.getElementById('score');
+        const questionSpan = document.getElementById('question');
+        const captchaDiv = document.getElementById('captcha');
+        const inputDiv = document.getElementById('input');
+        const feedbackDiv = document.getElementById('feedback');
+
+        // CAPTCHAの種類
+        const captchaTypes = ['text', 'math', 'shape'];
+
+        // ゲーム開始
+        function startGame() {
+            timeLeft = 60;
+            score = 0;
+            streak = 0;
+            questionNumber = 0;
+            timerSpan.textContent = '01:00';
+            scoreSpan.textContent = 'Score: 0';
+            feedbackDiv.innerHTML = '<p>How many CAPTCHAs can you solve? Click Start!</p><button onclick="playGame()">Start</button>';
+            captchaDiv.innerHTML = '';
+            inputDiv.innerHTML = '';
+        }
+
+        // ゲームプレイ開始
+        function playGame() {
+            generateCaptcha();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // タイマー更新
+        function updateTimer() {
+            timeLeft--;
+            const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const seconds = (timeLeft % 60).toString().padStart(2, '0');
+            timerSpan.textContent = `${minutes}:${seconds}`;
+            if (timeLeft <= 10) {
+                timerSpan.classList.add('warning');
+            }
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        // CAPTCHA生成
+        function generateCaptcha() {
+            questionNumber++;
+            questionSpan.textContent = `Question: ${questionNumber}`;
+            const type = captchaTypes[Math.floor(Math.random() * captchaTypes.length)];
+            switch (type) {
+                case 'text':
+                    generateTextCaptcha();
+                    break;
+                case 'math':
+                    generateMathCaptcha();
+                    break;
+                case 'shape':
+                    generateShapeCaptcha();
+                    break;
+            }
+        }
+
+        // テキストCAPTCHA生成
+        function generateTextCaptcha() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let captchaText = '';
+            for (let i = 0; i < 6; i++) {
+                captchaText += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = 200;
+            canvas.height = 50;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, 200, 50);
+            ctx.font = '30px Arial';
+            ctx.fillStyle = 'black';
+            for (let i = 0; i < captchaText.length; i++) {
+                ctx.save();
+                ctx.translate(30 * i + 15, 25);
+                ctx.rotate((Math.random() - 0.5) * 0.4);
+                ctx.fillText(captchaText[i], 0, 0);
+                ctx.restore();
+            }
+            for (let i = 0; i < 50; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * 200, Math.random() * 50, 1, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            captchaDiv.innerHTML = '';
+            captchaDiv.appendChild(canvas);
+            inputDiv.innerHTML = '<input type="text" id="answer"><button id="submit">Submit</button>';
+            correctAnswer = captchaText;
+            currentType = 'text';
+            document.getElementById('answer').focus();
+            document.getElementById('submit').addEventListener('click', checkAnswer);
+        }
+
+        // 数学CAPTCHA生成
+        function generateMathCaptcha() {
+            const num1 = Math.floor(Math.random() * 10) + 1;
+            const num2 = Math.floor(Math.random() * 10) + 1;
+            const operators = ['+', '-', '*'];
+            const operator = operators[Math.floor(Math.random() * operators.length)];
+            let answer;
+            switch (operator) {
+                case '+': answer = num1 + num2; break;
+                case '-': answer = num1 - num2; break;
+                case '*': answer = num1 * num2; break;
+            }
+            captchaDiv.innerHTML = `<p>${num1} ${operator} ${num2} = ?</p>`;
+            inputDiv.innerHTML = '<input type="text" id="answer"><button id="submit">Submit</button>';
+            correctAnswer = answer.toString();
+            currentType = 'math';
+            document.getElementById('answer').focus();
+            document.getElementById('submit').addEventListener('click', checkAnswer);
+        }
+
+        // シェイプCAPTCHA生成
+        function generateShapeCaptcha() {
+            const shapes = ['circle', 'square', 'triangle'];
+            const colors = ['red', 'green', 'blue'];
+            const criterionShape = shapes[Math.floor(Math.random() * shapes.length)];
+            const criterionColor = colors[Math.floor(Math.random() * colors.length)];
+            const grid = [];
+            for (let i = 0; i < 9; i++) {
+                grid.push({
+                    shape: shapes[Math.floor(Math.random() * shapes.length)],
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+            if (!grid.some(cell => cell.shape === criterionShape && cell.color === criterionColor)) {
+                const index = Math.floor(Math.random() * 9);
+                grid[index] = { shape: criterionShape, color: criterionColor };
+            }
+            const shapeSvgs = {
+                circle: `<svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="${criterionColor}" /></svg>`,
+                square: `<svg width="50" height="50"><rect x="5" y="5" width="40" height="40" fill="${criterionColor}" /></svg>`,
+                triangle: `<svg width="50" height="50"><polygon points="25,5 45,45 5,45" fill="${criterionColor}" /></svg>`
+            };
+            let gridHtml = '<div class="grid">';
+            grid.forEach((cell, index) => {
+                gridHtml += `<div class="cell" data-index="${index}" style="background-color: ${cell.color}; ${cell.shape === 'circle' ? 'border-radius: 50%;' : cell.shape === 'triangle' ? 'clip-path: polygon(50% 0%, 100% 100%, 0% 100%);' : ''}"></div>`;
+            });
+            gridHtml += '</div>';
+            captchaDiv.innerHTML = `<p>Select all ${criterionColor} ${criterionShape}s</p>${gridHtml}`;
+            inputDiv.innerHTML = '<button id="submit">Submit</button>';
+            correctAnswer = grid.map((cell, idx) => cell.shape === criterionShape && cell.color === criterionColor ? idx : -1).filter(idx => idx !== -1);
+            currentType = 'shape';
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.addEventListener('click', () => cell.classList.toggle('selected'));
+            });
+            document.getElementById('submit').addEventListener('click', checkAnswer);
+        }
+
+        // 回答チェック
+        function checkAnswer() {
+            let isCorrect = false;
+            if (currentType === 'text' || currentType === 'math') {
+                const userAnswer = document.getElementById('answer').value.trim();
+                isCorrect = userAnswer === correctAnswer;
+            } else if (currentType === 'shape') {
+                const selectedCells = document.querySelectorAll('.cell.selected');
+                const selectedIndices = Array.from(selectedCells).map(cell => parseInt(cell.dataset.index));
+                isCorrect = selectedIndices.length === correctAnswer.length && selectedIndices.every(idx => correctAnswer.includes(idx));
+            }
+            if (isCorrect) {
+                score++;
+                streak++;
+                scoreSpan.textContent = `Score: ${score}`;
+                if (streak % 3 === 0) {
+                    timeLeft += 5;
+                }
+                showFeedback('correct');
+            } else {
+                streak = 0;
+                showFeedback('incorrect');
+            }
+            setTimeout(generateCaptcha, 1000);
+        }
+
+        // フィードバック表示
+        function showFeedback(type) {
+            feedbackDiv.className = type;
+            feedbackDiv.textContent = type === 'correct' ? 'Correct!' : 'Incorrect';
+            setTimeout(() => feedbackDiv.textContent = '', 1000);
+        }
+
+        // ゲーム終了
+        function endGame() {
+            clearInterval(timerInterval);
+            captchaDiv.innerHTML = '';
+            inputDiv.innerHTML = '';
+            feedbackDiv.innerHTML = `
+                <p>Game Over! Your score: ${score}</p>
+                <button onclick="shareOnTwitter()">Share on Twitter</button>
+                <button onclick="startGame()">Play Again</button>
+            `;
+        }
+
+        // Twitterでシェア
+        function shareOnTwitter() {
+            const text = `I scored ${score} in HowHuman! Test your human skills!`;
+            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+        }
+
+        // ゲーム初期化
+        startGame();
+    </script>
+</body>
+</html>
